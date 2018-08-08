@@ -57,6 +57,10 @@ pub static ARCH_INCLUDES: &'static [CapstoneArchInfo<'static>] = &[
         header_name: "xcore.h",
         cs_name: "xcore",
     },
+    CapstoneArchInfo {
+        header_name: "evm.h",
+        cs_name: "evm",
+    },
 ];
 
 pub static BINDINGS_FILE: &'static str = "capstone.rs";

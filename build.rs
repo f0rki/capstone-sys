@@ -73,13 +73,13 @@ fn build_capstone_cc() {
                     dir,
                     e.file_name().to_str().expect("Invalid filename")
                 )
-            })
-            .collect()
+            }).collect()
     }
 
     fn find_c_source_files(dir: &str) -> Vec<String> {
         read_dir_and_filter(dir, |e| {
-            let file_type = e.file_type()
+            let file_type = e
+                .file_type()
                 .expect("Failed to read capstone source directory");
             let file_name = e.file_name().into_string().expect("Invalid filename");
             file_type.is_file() && (file_name.ends_with(".c") || file_name.ends_with(".C"))
@@ -88,7 +88,8 @@ fn build_capstone_cc() {
 
     fn find_arch_dirs() -> Vec<String> {
         read_dir_and_filter(&format!("{}/{}", CAPSTONE_DIR, "arch"), |e| {
-            let file_type = e.file_type()
+            let file_type = e
+                .file_type()
                 .expect("Failed to read capstone source directory");
             file_type.is_dir()
         })
@@ -119,6 +120,7 @@ fn build_capstone_cc() {
         .define("CAPSTONE_HAS_SYSZ", None)
         .define("CAPSTONE_HAS_X86", None)
         .define("CAPSTONE_HAS_XCORE", None)
+        .define("CAPSTONE_HAS_EVM", None)
         .flag_if_supported("-Wno-unused-function")
         .flag_if_supported("-Wno-unused-parameter")
         .flag_if_supported("-Wno-unknown-pragmas")
@@ -236,7 +238,8 @@ fn main() {
         env_var("CARGO_MANIFEST_DIR"),
         "pre_generated".into(),
         BINDINGS_FILE.into(),
-    ].iter()
+    ]
+        .iter()
         .collect();
     let out_path = PathBuf::from(env_var("OUT_DIR")).join(BINDINGS_FILE);
 

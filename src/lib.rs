@@ -19,6 +19,7 @@
 //! * `sysz`: System z
 //! * `x86`: x86 family (includes 16, 32, and 64 bit modes)
 //! * `xcore`: XCore
+//! * `evm`: EVM
 //!
 //! For each architecture, *at least* the following types are defined (replace `ARCH` with
 //! architecture names shown above):
@@ -80,6 +81,7 @@ mod test {
             index: 0,
             scale: 0,
             disp: 0,
+            lshift: 0,
         };
 
         // Union types
@@ -93,6 +95,8 @@ mod test {
             type_: arm_op_type::ARM_OP_REG,
             __bindgen_anon_1: cs_arm_op__bindgen_ty_2 { reg: 0 },
             subtracted: false,
+            access: 0,
+            neon_lane: -1,
         };
         cs_arm {
             usermode: false,
@@ -147,6 +151,7 @@ mod test {
             ext: arm64_extender::ARM64_EXT_UXTB,
             type_: arm64_op_type::ARM64_OP_REG,
             __bindgen_anon_1: cs_arm64_op__bindgen_ty_2 { reg: 0 },
+            access: 0,
         };
         cs_arm64 {
             cc: arm64_cc::ARM64_CC_EQ,
@@ -194,7 +199,7 @@ mod test {
         };
         cs_mips {
             op_count: 0,
-            operands: [op; 8],
+            operands: [op; 10],
         };
 
         // There are no MIPS-specific types
@@ -328,6 +333,7 @@ mod test {
             size: 0,
             avx_bcast: x86_avx_bcast::X86_AVX_BCAST_2,
             avx_zero_opmask: false,
+            access: 0,
         };
         cs_x86 {
             prefix: [0; 4],
@@ -353,6 +359,8 @@ mod test {
                 imm_offset: 0,
                 imm_size: 0,
             },
+            xop_cc: x86_xop_cc::X86_XOP_CC_INVALID,
+            __bindgen_anon_1: cs_x86__bindgen_ty_1 { eflags: 0 },
         };
 
         // x86-specific constants
@@ -422,7 +430,7 @@ mod test {
             id: 0,
             address: 0,
             size: 0,
-            bytes: [0; 16],
+            bytes: [0; 33],
             mnemonic: [0; 32],
             op_str: [0; 160],
             detail: 0 as *mut cs_detail,
@@ -449,7 +457,7 @@ mod test {
 
         println!("Capstone version (major, minor) = {:?}", (major, minor));
 
-        assert!(major == 3, "Invalid major version {:?}", major);
+        assert!(major == 4, "Invalid major version {:?}", major);
         assert!(
             minor >= 0 && minor < 1000,
             "Invalid minor version {:?}",
@@ -506,8 +514,9 @@ mod test {
 
         for &(&(bytes, mnemonic, ref id), insn) in insn_compare_zipped.iter() {
             let insn_mnemonic = convert_char_array_to_string(&insn.mnemonic);
-            assert_eq!(&insn.bytes[..insn.size as usize], bytes);
             assert_eq!(insn_mnemonic, mnemonic);
+            assert_eq!(insn.size as usize, bytes.len());
+            assert_eq!(&insn.bytes[..insn.size as usize], bytes);
             assert_eq!(insn.address, address);
             assert_eq!(insn.id, *id);
             address += insn.size as u64;
@@ -530,5 +539,254 @@ mod test {
             (&[0x90], "nop", x86_insn::X86_INS_NOP as u32),
         ];
         test_disassembly_helper(cs_arch::CS_ARCH_X86, CS_MODE_LITTLE_ENDIAN, code);
+    }
+
+    #[test]
+    fn test_evm_disassembly() {
+        let code: &[(&[u8], &str, _)] = &[
+            (&[0x60, 0x1], "push1", evm_insn::EVM_INS_PUSH1 as u32),
+            (&[0x54], "sload", evm_insn::EVM_INS_SLOAD as u32),
+            (&[0x60, 0x0], "push1", evm_insn::EVM_INS_PUSH1 as u32),
+            (&[0x55], "sstore", evm_insn::EVM_INS_SSTORE as u32),
+            (&[0x60, 0x0], "push1", evm_insn::EVM_INS_PUSH1 as u32),
+            (&[0x52], "mstore", evm_insn::EVM_INS_MSTORE as u32),
+            (&[0x60, 0x20], "push1", evm_insn::EVM_INS_PUSH1 as u32),
+            (&[0x60, 0x0], "push1", evm_insn::EVM_INS_PUSH1 as u32),
+            (&[0xf3], "return", evm_insn::EVM_INS_RETURN as u32),
+            (&[0x61, 0x0, 0x35], "push2", evm_insn::EVM_INS_PUSH2 as u32),
+            (&[0x56], "jump", evm_insn::EVM_INS_JUMP as u32),
+            (&[0x0], "stop", evm_insn::EVM_INS_STOP as u32),
+            (&[0xff], "suicide", evm_insn::EVM_INS_SUICIDE as u32),
+            (&[0x5b], "jumpdest", evm_insn::EVM_INS_JUMPDEST as u32),
+            (&[0x60, 0x1], "push1", evm_insn::EVM_INS_PUSH1 as u32),
+            (&[0x60, 0xf4], "push1", evm_insn::EVM_INS_PUSH1 as u32),
+            (&[0x57], "jumpi", evm_insn::EVM_INS_JUMPI as u32),
+            (&[0x60, 0xff], "push1", evm_insn::EVM_INS_PUSH1 as u32),
+            (&[0x61, 0xff, 0xff], "push2", evm_insn::EVM_INS_PUSH2 as u32),
+            (
+                &[0x62, 0xff, 0xff, 0xff],
+                "push3",
+                evm_insn::EVM_INS_PUSH3 as u32,
+            ),
+            (
+                &[0x63, 0xff, 0xff, 0xff, 0xff],
+                "push4",
+                evm_insn::EVM_INS_PUSH4 as u32,
+            ),
+            (
+                &[0x64, 0xff, 0xff, 0xff, 0xff, 0xff],
+                "push5",
+                evm_insn::EVM_INS_PUSH5 as u32,
+            ),
+            (
+                &[0x65, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff],
+                "push6",
+                evm_insn::EVM_INS_PUSH6 as u32,
+            ),
+            (
+                &[0x66, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff],
+                "push7",
+                evm_insn::EVM_INS_PUSH7 as u32,
+            ),
+            (
+                &[0x67, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff],
+                "push8",
+                evm_insn::EVM_INS_PUSH8 as u32,
+            ),
+            (
+                &[0x68, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff],
+                "push9",
+                evm_insn::EVM_INS_PUSH9 as u32,
+            ),
+            (
+                &[
+                    0x69, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                ],
+                "push10",
+                evm_insn::EVM_INS_PUSH10 as u32,
+            ),
+            (
+                &[
+                    0x6a, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                ],
+                "push11",
+                evm_insn::EVM_INS_PUSH11 as u32,
+            ),
+            (
+                &[
+                    0x6b, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                ],
+                "push12",
+                evm_insn::EVM_INS_PUSH12 as u32,
+            ),
+            (
+                &[
+                    0x6c, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff,
+                ],
+                "push13",
+                evm_insn::EVM_INS_PUSH13 as u32,
+            ),
+            (
+                &[
+                    0x6d, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff,
+                ],
+                "push14",
+                evm_insn::EVM_INS_PUSH14 as u32,
+            ),
+            (
+                &[
+                    0x6e, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff,
+                ],
+                "push15",
+                evm_insn::EVM_INS_PUSH15 as u32,
+            ),
+            (
+                &[
+                    0x6f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff,
+                ],
+                "push16",
+                evm_insn::EVM_INS_PUSH16 as u32,
+            ),
+            (
+                &[
+                    0x70, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0xff,
+                ],
+                "push17",
+                evm_insn::EVM_INS_PUSH17 as u32,
+            ),
+            (
+                &[
+                    0x71, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                ],
+                "push18",
+                evm_insn::EVM_INS_PUSH18 as u32,
+            ),
+            (
+                &[
+                    0x72, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                ],
+                "push19",
+                evm_insn::EVM_INS_PUSH19 as u32,
+            ),
+            (
+                &[
+                    0x73, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                ],
+                "push20",
+                evm_insn::EVM_INS_PUSH20 as u32,
+            ),
+            (
+                &[
+                    0x74, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                ],
+                "push21",
+                evm_insn::EVM_INS_PUSH21 as u32,
+            ),
+            (
+                &[
+                    0x75, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                ],
+                "push22",
+                evm_insn::EVM_INS_PUSH22 as u32,
+            ),
+            (
+                &[
+                    0x76, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                ],
+                "push23",
+                evm_insn::EVM_INS_PUSH23 as u32,
+            ),
+            (
+                &[
+                    0x77, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                ],
+                "push24",
+                evm_insn::EVM_INS_PUSH24 as u32,
+            ),
+            (
+                &[
+                    0x78, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                ],
+                "push25",
+                evm_insn::EVM_INS_PUSH25 as u32,
+            ),
+            (
+                &[
+                    0x79, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff,
+                ],
+                "push26",
+                evm_insn::EVM_INS_PUSH26 as u32,
+            ),
+            (
+                &[
+                    0x7a, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff,
+                ],
+                "push27",
+                evm_insn::EVM_INS_PUSH27 as u32,
+            ),
+            (
+                &[
+                    0x7b, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff,
+                ],
+                "push28",
+                evm_insn::EVM_INS_PUSH28 as u32,
+            ),
+            (
+                &[
+                    0x7c, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff,
+                ],
+                "push29",
+                evm_insn::EVM_INS_PUSH29 as u32,
+            ),
+            (
+                &[
+                    0x7d, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0xff,
+                ],
+                "push30",
+                evm_insn::EVM_INS_PUSH30 as u32,
+            ),
+            (
+                &[
+                    0x7e, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                ],
+                "push31",
+                evm_insn::EVM_INS_PUSH31 as u32,
+            ),
+            (
+                &[
+                    0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                ],
+                "push32",
+                evm_insn::EVM_INS_PUSH32 as u32,
+            ),
+        ];
+        test_disassembly_helper(cs_arch::CS_ARCH_EVM, cs_mode(0), code);
     }
 }
